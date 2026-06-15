@@ -2,8 +2,9 @@ import streamlit as st
 import os
 import tempfile
 import time
-from langchain_community.document_loaders import PyMuPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+import pymupdf4llm
+from langchain_text_splitters import MarkdownTextSplitter
+from langchain_core.documents import Document
 from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
@@ -13,9 +14,9 @@ from pymongo import MongoClient
 import key_param
 
 #  UI Configuration 
-st.set_page_config(page_title="HELB & Campus Navigator", layout="wide")
-st.title("The HELB & Campus Navigator")
-st.markdown("Upload multiple PDFs (like HELB Guidelines, Student Handbooks) and ask questions! The AI will answer and cite exactly which document the answer came from.")
+st.set_page_config(page_title="Campus Affairs Navigator", layout="wide")
+st.title("Campus Affairs Navigator")
+st.markdown("Upload multiple PDFs (like Timetables, HELB Guidelines, Student Handbooks) and ask questions! The AI will answer and cite exactly which document the answer came from.")
 
 # Sidebar: Configuration & FAQs 
 with st.sidebar:
@@ -82,18 +83,18 @@ with st.expander("Upload Campus Documents (Bulk Upload Supported)", expanded=Tru
                     tmp_file_path = tmp_file.name
 
                 try:
-                    # 1. Load the PDF
-                    loader = PyMuPDFLoader(tmp_file_path)
-                    docs = loader.load()
+                    # 1. Convert PDF to Markdown (Preserves Tables perfectly!)
+                    md_text = pymupdf4llm.to_markdown(tmp_file_path)
                     
-                    # 2. Split the PDF
-                    text_splitter = RecursiveCharacterTextSplitter(
-                        separators=["\n\n", "\n", " ", ""],
-                        chunk_size=1000,
-                        chunk_overlap=150,
-                        length_function=len
+                    # Wrap the text in a Document object so LangChain can process it
+                    doc = Document(page_content=md_text)
+                    
+                    # 2. Split the Markdown without destroying tables
+                    text_splitter = MarkdownTextSplitter(
+                        chunk_size=1500, # Increased chunk size to keep massive tables together
+                        chunk_overlap=200
                     )
-                    splits = text_splitter.split_documents(docs)
+                    splits = text_splitter.split_documents([doc])
                     
                     # 3. Add metadata (CRUCIAL FOR SOURCE TRACKING)
                     for split in splits:
@@ -104,18 +105,26 @@ with st.expander("Upload Campus Documents (Bulk Upload Supported)", expanded=Tru
                         st.error(f"No text found in {filename}. It might be a scanned image.")
                         continue
                         
-                    # 4. Upload to MongoDB
-                    MongoDBAtlasVectorSearch.from_documents(
-                        documents=splits,
-                        embedding=embeddings,
-                        collection=collection,
-                        index_name="vector_index"
-                    )
+                    # 4. Upload to MongoDB in smaller batches to avoid rate limits
+                    import time
+                    batch_size = 5
+                    for i in range(0, len(splits), batch_size):
+                        batch = splits[i:i+batch_size]
+                        status_text.text(f"Uploading batch {i//batch_size + 1} of {(len(splits)-1)//batch_size + 1} for {filename}...")
+                        try:
+                            MongoDBAtlasVectorSearch.from_documents(
+                                documents=batch,
+                                embedding=embeddings,
+                                collection=collection,
+                                index_name="vector_index"
+                            )
+                            time.sleep(8) # Much longer sleep to respect Free Tier API rate limits!
+                        except Exception as e:
+                            status_text.text(f"Rate limit hit! Cooling down for 30 seconds...")
+                            time.sleep(30)
+                            MongoDBAtlasVectorSearch.from_documents(batch, embeddings, collection=collection, index_name="vector_index")
+                            
                     st.success(f"✅ Successfully embedded {filename} into MongoDB.")
-                    
-                    # 5. Rate Limit Protection: Pause for 3 seconds before hitting Google again
-                    status_text.text("Cooling down to prevent rate limits...")
-                    time.sleep(3)
                     
                 except Exception as e:
                     import traceback
