@@ -1,11 +1,11 @@
 # 🎓 Campus AI Navigator (Multi-Document RAG)
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url-goes-here.streamlit.app)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://uniassist-rag-kq8pxarhtjksmep3hhbpft.streamlit.app)
 
 A Production-Ready, Multi-Document Retrieval-Augmented Generation (RAG) Web Application built to help university students navigate dense academic policy documents, exam timetables, and government funding guidelines.
 
 ## 🚀 Live Demo
-**Try the app here:** [Link to your Live Streamlit App](https://your-app-url-goes-here.streamlit.app)
+**Try the app here:** [Campus AI Navigator](https://uniassist-rag-kq8pxarhtjksmep3hhbpft.streamlit.app)
 
 ## ⚙️ How the AI Pipeline Works
 When a user uploads a PDF into the Web Interface, the application triggers an automated ingestion pipeline:
