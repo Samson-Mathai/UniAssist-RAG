@@ -14,6 +14,7 @@ __pycache__/
 # Data & Documents
 *.pdf
 *.txt
+!requirements.txt
 *.csv
 
 # Streamlit
