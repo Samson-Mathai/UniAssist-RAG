@@ -1,0 +1,20 @@
+# Environments
+venv/
+env/
+.env
+
+# API Keys and Secrets (CRITICAL)
+key_param.py
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data & Documents
+*.pdf
+*.txt
+*.csv
+
+# Streamlit
+.streamlit/
