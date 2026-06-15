@@ -11,7 +11,16 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from pymongo import MongoClient
-import key_param
+
+# --- Secret Keys Management ---
+# Try to load local keys. If we are on Streamlit Cloud, pull from Streamlit Secrets instead!
+try:
+    import key_param
+    MONGODB_URI = key_param.MONGODB_URI
+    GEMINI_API_KEY = key_param.GEMINI_API_KEY
+except ImportError:
+    MONGODB_URI = st.secrets["MONGODB_URI"]
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
 #  UI Configuration 
 st.set_page_config(page_title="Campus Affairs Navigator", layout="wide")
@@ -23,7 +32,7 @@ with st.sidebar:
     st.header("Settings")
     st.markdown("If you run out of tokens, you can swap your API key here without restarting or losing progress!")
     user_api_key = st.text_input("Google Gemini API Key (Optional)", type="password", help="Leave blank to use the default key in your code.")
-    active_key = user_api_key if user_api_key else key_param.GEMINI_API_KEY
+    active_key = user_api_key if user_api_key else GEMINI_API_KEY
     
     st.divider()
     
@@ -38,12 +47,13 @@ with st.sidebar:
 #Database and AI Setup
 @st.cache_resource(show_spinner=False)
 def get_mongo_client():
-    return MongoClient(key_param.MONGODB_URI)
+    return MongoClient(MONGODB_URI)
 
+# --- MongoDB Setup ---
 client = get_mongo_client()
 collection = client["book_mongodb_chunks"]["chunked_data"]
 
-# Initialize AI components dynamically based on the active API key
+# --- AI Models Setup ---
 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2", google_api_key=active_key)
 vector_store = MongoDBAtlasVectorSearch(
     collection=collection,
