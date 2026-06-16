@@ -12,14 +12,8 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from pymongo import MongoClient
 
-# Secret Keys Management 
+# --- Secret Keys Management ---
 import sys
-from streamlit_cookies_manager import EncryptedCookieManager
-
-# 1. Initialize Browser Cookies
-cookies = EncryptedCookieManager(prefix="uniassist", password="local_cookie_encryption_key")
-if not cookies.ready():
-    st.stop() # Wait for cookies to load
 
 # 2. Try hardcoded local keys
 hardcoded_mongo = ""
@@ -60,8 +54,7 @@ import re
 with st.sidebar:
     st.header("🔑 Campus Portal")
     
-    saved_token = cookies.get("login_token", "")
-    login_input = st.text_input("Enter Student ID or Admin Password", value=saved_token, type="password", help="Students: Try BDAT-1234")
+    login_input = st.text_input("Enter Student ID or Admin Password", type="password", help="Students: Try BDAT-1234")
     
     role = None
     active_user_id = None
@@ -79,11 +72,6 @@ with st.sidebar:
             st.caption("Documents you upload are perfectly private.")
         else:
             st.error("❌ Invalid ID format. (Example: BDAT-1234)")
-            
-        if st.button("Save Login"):
-            cookies["login_token"] = login_input
-            cookies.save()
-            st.rerun()
     
     st.divider()
 
