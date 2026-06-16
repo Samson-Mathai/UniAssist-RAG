@@ -7,3 +7,4 @@ langchain-google-genai
 pymongo
 pymupdf
 pymupdf4llm
+streamlit-cookies-manager

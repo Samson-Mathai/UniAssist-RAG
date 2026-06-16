@@ -13,14 +13,34 @@ from langchain_core.output_parsers import StrOutputParser
 from pymongo import MongoClient
 
 # --- Secret Keys Management ---
-# Try to load local keys. If we are on Streamlit Cloud, pull from Streamlit Secrets instead!
+import sys
+from streamlit_cookies_manager import EncryptedCookieManager
+
+# 1. Initialize Browser Cookies
+cookies = EncryptedCookieManager(prefix="uniassist", password="local_cookie_encryption_key")
+if not cookies.ready():
+    st.stop() # Wait for cookies to load
+
+# 2. Try hardcoded local keys
+hardcoded_mongo = ""
+hardcoded_gemini = ""
 try:
     import key_param
-    MONGODB_URI = key_param.MONGODB_URI
-    GEMINI_API_KEY = key_param.GEMINI_API_KEY
+    hardcoded_mongo = key_param.MONGODB_URI
+    hardcoded_gemini = key_param.GEMINI_API_KEY
 except ImportError:
-    MONGODB_URI = st.secrets["MONGODB_URI"]
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    pass
+
+# 3. Try Streamlit Cloud Vault
+try:
+    hardcoded_mongo = hardcoded_mongo or st.secrets.get("MONGODB_URI", "")
+    hardcoded_gemini = hardcoded_gemini or st.secrets.get("GEMINI_API_KEY", "")
+except Exception:
+    pass
+
+# 4. Pull saved cookies for returning users
+cookie_mongo = cookies.get("MONGODB_URI", "")
+cookie_gemini = cookies.get("GEMINI_API_KEY", "")
 
 #  UI Configuration 
 st.set_page_config(page_title="Campus Affairs Navigator", layout="wide")
@@ -29,12 +49,34 @@ st.markdown("Upload multiple PDFs (like Timetables, HELB Guidelines, Student Han
 
 # Sidebar: Configuration & FAQs 
 with st.sidebar:
-    st.header("Settings")
-    st.markdown("If you run out of tokens, you can swap your API key here without restarting or losing progress!")
-    user_api_key = st.text_input("Google Gemini API Key (Optional)", type="password", help="Leave blank to use the default key in your code.")
-    active_key = user_api_key if user_api_key else GEMINI_API_KEY
+    st.header("🔑 Credentials Login")
+    
+    if hardcoded_mongo and hardcoded_gemini:
+        st.success("✅ Credentials securely loaded from Vault.")
+        active_mongo = hardcoded_mongo
+        active_gemini = hardcoded_gemini
+    else:
+        st.info("Welcome! Please login below:")
+        active_mongo = st.text_input("MongoDB Connection String", value=cookie_mongo, type="password")
+        active_gemini = st.text_input("Google Gemini API Key", value=cookie_gemini, type="password")
+        
+        if st.button("Save Login & Connect"):
+            cookies["MONGODB_URI"] = active_mongo
+            cookies["GEMINI_API_KEY"] = active_gemini
+            cookies.save()
+            st.rerun()
+
+    # Determine final keys to use
+    MONGODB_URI = active_mongo
+    GEMINI_API_KEY = active_gemini
     
     st.divider()
+
+# --- Security Check ---
+if not MONGODB_URI or not GEMINI_API_KEY:
+    st.warning("👈 Please login with your MongoDB URI and Gemini API Key in the sidebar to unlock the AI!")
+    st.stop()
+
     
     st.header("Frequently Asked Questions")
     with st.expander("How do I avoid losing progress?"):
@@ -54,13 +96,13 @@ client = get_mongo_client()
 collection = client["book_mongodb_chunks"]["chunked_data"]
 
 # --- AI Models Setup ---
-embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2", google_api_key=active_key)
+embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2", google_api_key=GEMINI_API_KEY)
 vector_store = MongoDBAtlasVectorSearch(
     collection=collection,
     embedding=embeddings,
     index_name="vector_index"
 )
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=active_key, temperature=0)
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=GEMINI_API_KEY, temperature=0)
 
 #  Document Ingestion 
 with st.expander("Upload Campus Documents (Bulk Upload Supported)", expanded=True):
