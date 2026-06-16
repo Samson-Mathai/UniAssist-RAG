@@ -12,7 +12,7 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from pymongo import MongoClient
 
-# --- Secret Keys Management ---
+# Secret Keys Management 
 import sys
 from streamlit_cookies_manager import EncryptedCookieManager
 
@@ -24,10 +24,12 @@ if not cookies.ready():
 # 2. Try hardcoded local keys
 hardcoded_mongo = ""
 hardcoded_gemini = ""
+hardcoded_admin = "admin123"
 try:
     import key_param
     hardcoded_mongo = key_param.MONGODB_URI
     hardcoded_gemini = key_param.GEMINI_API_KEY
+    hardcoded_admin = getattr(key_param, "ADMIN_PASSWORD", "admin123")
 except ImportError:
     pass
 
@@ -35,46 +37,59 @@ except ImportError:
 try:
     hardcoded_mongo = hardcoded_mongo or st.secrets.get("MONGODB_URI", "")
     hardcoded_gemini = hardcoded_gemini or st.secrets.get("GEMINI_API_KEY", "")
+    hardcoded_admin = st.secrets.get("ADMIN_PASSWORD", hardcoded_admin)
 except Exception:
     pass
 
-# 4. Pull saved cookies for returning users
-cookie_mongo = cookies.get("MONGODB_URI", "")
-cookie_gemini = cookies.get("GEMINI_API_KEY", "")
+# Lock the Database Connection globally
+MONGODB_URI = hardcoded_mongo
+GEMINI_API_KEY = hardcoded_gemini
+
+if not MONGODB_URI or not GEMINI_API_KEY:
+    st.error("🚨 Master Keys are missing from the Cloud Vault! The Database is locked.")
+    st.stop()
 
 #  UI Configuration 
 st.set_page_config(page_title="Campus Affairs Navigator", layout="wide")
 st.title("Campus Affairs Navigator")
 st.markdown("Upload multiple PDFs (like Timetables, HELB Guidelines, Student Handbooks) and ask questions! The AI will answer and cite exactly which document the answer came from.")
 
+import re
+
 # Sidebar: Configuration & FAQs 
 with st.sidebar:
-    st.header("🔑 Credentials Login")
+    st.header("🔑 Campus Portal")
     
-    if hardcoded_mongo and hardcoded_gemini:
-        st.success("✅ Credentials securely loaded from Vault.")
-        active_mongo = hardcoded_mongo
-        active_gemini = hardcoded_gemini
-    else:
-        st.info("Welcome! Please login below:")
-        active_mongo = st.text_input("MongoDB Connection String", value=cookie_mongo, type="password")
-        active_gemini = st.text_input("Google Gemini API Key", value=cookie_gemini, type="password")
-        
-        if st.button("Save Login & Connect"):
-            cookies["MONGODB_URI"] = active_mongo
-            cookies["GEMINI_API_KEY"] = active_gemini
+    saved_token = cookies.get("login_token", "")
+    login_input = st.text_input("Enter Student ID or Admin Password", value=saved_token, type="password", help="Students: Try BDAT-1234")
+    
+    role = None
+    active_user_id = None
+    
+    if login_input:
+        if login_input == hardcoded_admin:
+            role = "ADMIN"
+            active_user_id = "GLOBAL"
+            st.success("👑 Logged in as Administrator")
+            st.caption("Documents you upload will be visible to everyone.")
+        elif re.match(r"^[A-Za-z]{3,4}-\d{4}$", login_input):
+            role = "STUDENT"
+            active_user_id = login_input.upper()
+            st.success(f"🎓 Logged in as Student: {active_user_id}")
+            st.caption("Documents you upload are perfectly private.")
+        else:
+            st.error("❌ Invalid ID format. (Example: BDAT-1234)")
+            
+        if st.button("Save Login"):
+            cookies["login_token"] = login_input
             cookies.save()
             st.rerun()
-
-    # Determine final keys to use
-    MONGODB_URI = active_mongo
-    GEMINI_API_KEY = active_gemini
     
     st.divider()
 
-# --- Security Check ---
-if not MONGODB_URI or not GEMINI_API_KEY:
-    st.warning("👈 Please login with your MongoDB URI and Gemini API Key in the sidebar to unlock the AI!")
+# --- Role Security Check ---
+if not role:
+    st.warning("👈 Please login with your Student ID to unlock the AI!")
     st.stop()
 
     
@@ -148,10 +163,11 @@ with st.expander("Upload Campus Documents (Bulk Upload Supported)", expanded=Tru
                     )
                     splits = text_splitter.split_documents([doc])
                     
-                    # 3. Add metadata (CRUCIAL FOR SOURCE TRACKING)
+                    # 3. Add metadata (CRUCIAL FOR SOURCE TRACKING AND PRIVACY)
                     for split in splits:
                         split.metadata["hasCode"] = False
                         split.metadata["source"] = filename # Track exactly which PDF this chunk came from
+                        split.metadata["owner_id"] = active_user_id # Privacy Lock: GLOBAL or Student-ID
                     
                     if len(splits) == 0:
                         st.error(f"No text found in {filename}. It might be a scanned image.")
@@ -211,9 +227,20 @@ if prompt := st.chat_input("E.g. How do I appeal my HELB Band categorization?"):
     with st.chat_message("assistant"):
         with st.spinner("Searching through your documents..."):
             
+            # Database Security Firewall Filter
+            if role == "ADMIN":
+                search_filter = {"hasCode": {"$eq": False}} # Admins can search everything
+            else:
+                search_filter = {
+                    "$and": [
+                        {"hasCode": {"$eq": False}},
+                        {"owner_id": {"$in": ["GLOBAL", active_user_id]}} # Students see Global + Their Own
+                    ]
+                }
+            
             retriever = vector_store.as_retriever(
                 search_type="similarity",
-                search_kwargs={"k": 5, "pre_filter": {"hasCode": {"$eq": False}}} # Fetch top 5 paragraphs
+                search_kwargs={"k": 5, "pre_filter": search_filter} 
             )
             
             # The Custom Prompt: Forcing Gemini to cite its sources!
