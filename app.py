@@ -151,11 +151,10 @@ with st.expander("Upload Campus Documents (Bulk Upload Supported)", expanded=Tru
                     )
                     splits = text_splitter.split_documents([doc])
                     
-                    # 3. Add metadata (CRUCIAL FOR SOURCE TRACKING AND PRIVACY)
+                    # 3. Add metadata (CRUCIAL FOR SOURCE TRACKING)
                     for split in splits:
                         split.metadata["hasCode"] = False
                         split.metadata["source"] = filename # Track exactly which PDF this chunk came from
-                        split.metadata["owner_id"] = active_user_id # Privacy Lock: GLOBAL or Student-ID
                     
                     if len(splits) == 0:
                         st.error(f"No text found in {filename}. It might be a scanned image.")
@@ -215,20 +214,10 @@ if prompt := st.chat_input("E.g. How do I appeal my HELB Band categorization?"):
     with st.chat_message("assistant"):
         with st.spinner("Searching through your documents..."):
             
-            # Database Security Firewall Filter
-            if role == "ADMIN":
-                search_filter = {"hasCode": {"$eq": False}} # Admins can search everything
-            else:
-                search_filter = {
-                    "$and": [
-                        {"hasCode": {"$eq": False}},
-                        {"owner_id": {"$in": ["GLOBAL", active_user_id]}} # Students see Global + Their Own
-                    ]
-                }
-            
+            # Everyone searches the entire public database
             retriever = vector_store.as_retriever(
                 search_type="similarity",
-                search_kwargs={"k": 5, "pre_filter": search_filter} 
+                search_kwargs={"k": 5, "pre_filter": {"hasCode": {"$eq": False}}} 
             )
             
             # The Custom Prompt: Forcing Gemini to cite its sources!
