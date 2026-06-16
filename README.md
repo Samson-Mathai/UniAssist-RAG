@@ -151,7 +151,7 @@ lost due to arbitrary chunking cuts.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
