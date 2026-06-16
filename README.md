@@ -1,5 +1,3 @@
-<div align="center">
-
 # Campus Assist - RAG
 AI-powered document intelligence helping Kenyan university students navigate HELB funding, clearance, campus policy, class timetables, and exam schedules — instantly.
 
@@ -12,7 +10,8 @@ AI-powered document intelligence helping Kenyan university students navigate HEL
 ![RAG](https://img.shields.io/badge/Architecture-Hybrid_RAG-purple)
 ![Use Case](https://img.shields.io/badge/Use_Case-EdTech_Kenya-blue)
 
-</div>
+### Check It Out Here
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://survey-analysis-engine-ga5jcdpf3tschd4nautrkq.streamlit.app/)
 
 ---
 
